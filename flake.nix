@@ -165,7 +165,7 @@
                       WorkingDirectory = conf.diskPath;
                       # Start VM via qkqemunix-run
                       ExecStart = ''
-                        ${mainpackage} ${name}
+                        ${getExe mainpackage} ${name}
                       '';
                       #
                       Restart = "always";
