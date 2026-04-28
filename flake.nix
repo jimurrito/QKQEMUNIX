@@ -152,7 +152,7 @@
                   services."qkqemunix-${name}" =
                     let
                       configRepo =
-                        if (config.useRootConfigRepo) then qkqemunix-nixops.rootConfigRepo else conf.configRepo;
+                        if (conf.useRootConfigRepo) then qkqemunix-nixops.rootConfigRepo else conf.configRepo;
                     in
                     {
                       enable = conf.enable;
