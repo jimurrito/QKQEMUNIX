@@ -140,7 +140,7 @@
                 mkIf (conf.enable) {
                   services."qkqemunix-${name}" = {
                     enable = conf.enable;
-                    description = "QEMU VM wrapper for VM [${name}] running under [${conf.user}]";
+                    description = "QEMU VM wrapper for VM [${name}] running under [qkqemunix]";
                     after = [ "network.target" ];
                     wantedBy = [ "multi-user.target" ];
                     path = with pkgs; [
