@@ -21,7 +21,7 @@
         #
         installPhase = ''
           mkdir -p "$out/bin"
-          cp run.bash "$out/bin/qkqemunix-run"
+          mv run.bash "$out/bin/qkqemunix-run"
           chmod +x "$out/bin/qkqemunix-run"
         '';
       };
