@@ -47,9 +47,20 @@
           options.services.quick-qemu = {
             default = { };
             enable = mkEnableOption "Quick QEMU VM/Systemd wrapper";
+            rootConfigRepo = mkOption {
+              type = types.str;
+              default = name;
+              description = "url repository containing the nixosConfiguration for all the VMs that opt to use it.";
+            };
             virtualmachines = mkOption {
               default = { };
               description = "List of VM, in submodule format. Name of submodule should relate to a definition in flake.nix";
+              useRootConfigRepo = mkEnableOption "Use of the parent repo configured under 'services.quick-qemu'";
+              configRepo = mkOption {
+                type = types.str;
+                default = name;
+                description = "url repository containing the nixosConfiguration for this VM.";
+              };
               type = types.attrsOf (
                 types.submodule (
                   { name, ... }:
@@ -60,7 +71,7 @@
                       diskPath = mkOption {
                         type = types.str;
                         default = name;
-                        description = "Absolute path to the target dir. User should have access to this dir.";
+                        description = "Absolute path to the target dir. 'qkqemunix' user should have access to this dir.";
                       };
                       portForward = {
                         vmPort = mkOption {
@@ -138,40 +149,45 @@
               mapAttrsToList (
                 name: conf:
                 mkIf (conf.enable) {
-                  services."qkqemunix-${name}" = {
-                    enable = conf.enable;
-                    description = "QEMU VM wrapper for VM [${name}] running under [qkqemunix]";
-                    after = [ "network.target" ];
-                    wantedBy = [ "multi-user.target" ];
-                    path = with pkgs; [
-                      qemu
-                      bash
-                      nixos-rebuild
-                      git
-                    ];
-                    # Set remote port mapping
-                    environment =
-                      let
-                        vport = conf.portForward.vmPort;
-                        hport = conf.portForward.hostPort;
-                      in
-                      {
-                        QEMU_NET_OPTS = "hostfwd=tcp::${hport}-:${vport}";
+                  services."qkqemunix-${name}" =
+                    let
+                      configRepo =
+                        if (config.useRootConfigRepo) then qkqemunix-nixops.rootConfigRepo else conf.configRepo;
+                    in
+                    {
+                      enable = conf.enable;
+                      description = "QEMU VM wrapper for VM [${name}] running under [qkqemunix]";
+                      after = [ "network.target" ];
+                      wantedBy = [ "multi-user.target" ];
+                      path = with pkgs; [
+                        qemu
+                        bash
+                        nixos-rebuild
+                        git
+                      ];
+                      # Set remote port mapping
+                      environment =
+                        let
+                          vport = conf.portForward.vmPort;
+                          hport = conf.portForward.hostPort;
+                        in
+                        {
+                          QEMU_NET_OPTS = "hostfwd=tcp::${hport}-:${vport}";
+                        };
+                      serviceConfig = {
+                        User = "qkqemunix";
+                        Group = "qkqemunix";
+                        # Set to disk path
+                        WorkingDirectory = conf.diskPath;
+                        # Start VM via qkqemunix-run
+                        ExecStart = ''
+                          ${getExe mainpackage} ${name} ${configRepo}
+                        '';
+                        #
+                        Restart = "always";
+                        #
                       };
-                    serviceConfig = {
-                      User = "qkqemunix";
-                      Group = "qkqemunix";
-                      # Set to disk path
-                      WorkingDirectory = conf.diskPath;
-                      # Start VM via qkqemunix-run
-                      ExecStart = ''
-                        ${getExe mainpackage} ${name}
-                      '';
-                      #
-                      Restart = "always";
-                      #
                     };
-                  };
                 }
               ) qkqemunix-nixops.virtualmachines
             );
