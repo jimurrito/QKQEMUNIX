@@ -13,16 +13,16 @@
     in
     {
       packages.${system}.default = pkgs.stdenv.mkDerivation {
-        pname = "qkqemu-run";
-        meta.mainProgram = "qkqemu-run";
+        pname = "qkqemunix-run";
+        meta.mainProgram = "qkqemunix-run";
         version = "0.1.0";
         src = ./.;
         dontBuild = true;
         #
         installPhase = ''
           mkdir -p "$out/bin"
-          cp run.bash "$out/bin/qkqemu-run"
-          chmod +x "$out/bin/qkqemu-run"
+          cp run.bash "$out/bin/qkqemunix-run"
+          chmod +x "$out/bin/qkqemunix-run"
         '';
       };
       #
@@ -37,7 +37,7 @@
         let
           pkgsystem = pkgs.stdenv.hostPlatform.system;
           mainpackage = self.packages.${pkgsystem}.default;
-          qkqemu-nixops = config.services.quick-qemu;
+          qkqemunix-nixops = config.services.quick-qemu;
         in
         with lib;
         {
@@ -95,7 +95,7 @@
           #
           #
           # config to be implemented via the `options`
-          config = lib.mkIf qkqemu-nixops.enable {
+          config = lib.mkIf qkqemunix-nixops.enable {
             #
             # Imports package and runs the install steps
             environment.systemPackages = [
@@ -112,13 +112,13 @@
             #
             # rootless identity that runs all the VMs
             users = {
-              groups.qkqemu = { };
-              users.qkqemu = {
+              groups.qkqemunix = { };
+              users.qkqemunix = {
                 enable = true;
-                group = "qkqemu";
+                group = "qkqemunix";
                 isSystemUser = true;
                 createHome = true;
-                home = "/var/qkqemu";
+                home = "/var/qkqemunix";
                 extraGroups = [ "libvirtd" ];
               };
             };
@@ -130,7 +130,7 @@
                 mkIf (conf.enable) {
                   firewall = conf.firewall;
                 }
-              ) qkqemu-nixops.virtualmachines
+              ) qkqemunix-nixops.virtualmachines
             );
             #
             # Systemd Service for each VM
@@ -138,7 +138,7 @@
               mapAttrsToList (
                 name: conf:
                 mkIf (conf.enable) {
-                  services."qkqemu-vm-${name}" = {
+                  services."qkqemunix-vm-${name}" = {
                     enable = conf.enable;
                     description = "QEMU VM wrapper for VM [${name}] running under [${conf.user}]";
                     after = [ "network.target" ];
@@ -163,7 +163,7 @@
                       Group = conf.group;
                       # Set to disk path
                       WorkingDirectory = conf.diskPath;
-                      # Start VM via qkqemu-run
+                      # Start VM via qkqemunix-run
                       ExecStart = ''
                         ${mainpackage} ${name}
                       '';
@@ -173,7 +173,7 @@
                     };
                   };
                 }
-              ) qkqemu-nixops.virtualmachines
+              ) qkqemunix-nixops.virtualmachines
             );
           };
         };
