@@ -55,12 +55,6 @@
             virtualmachines = mkOption {
               default = { };
               description = "List of VM, in submodule format. Name of submodule should relate to a definition in flake.nix";
-              useRootConfigRepo = mkEnableOption "Use of the parent repo configured under 'services.quick-qemu'";
-              configRepo = mkOption {
-                type = types.str;
-                default = name;
-                description = "url repository containing the nixosConfiguration for this VM.";
-              };
               type = types.attrsOf (
                 types.submodule (
                   { name, ... }:
@@ -68,6 +62,12 @@
                     options = {
                       #
                       enable = mkEnableOption "This VM service.";
+                      useRootConfigRepo = mkEnableOption "Use of the parent repo configured under 'services.quick-qemu'";
+                      configRepo = mkOption {
+                        type = types.str;
+                        default = name;
+                        description = "url repository containing the nixosConfiguration for this VM.";
+                      };
                       diskPath = mkOption {
                         type = types.str;
                         default = name;
