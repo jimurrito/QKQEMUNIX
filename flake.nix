@@ -1,5 +1,5 @@
 {
-  description = "<PROJECT DESCRIPTION>";
+  description = "Flake for streamlining the creation of QEMU VMs via nix build-vm and systemd";
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
   };
@@ -9,49 +9,22 @@
     let
       system = "x86_64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
-      lib = nixpkgs.lib;
+      #lib = nixpkgs.lib;
     in
     {
       packages.${system}.default = pkgs.stdenv.mkDerivation {
-        pname = "<PACKAGE NAME>";
-        meta.mainProgram = "<PACKAGE NAME>";
+        pname = "qkqemu-run";
+        meta.mainProgram = "qkqemu-run";
         version = "0.1.0";
         src = ./.;
         dontBuild = true;
         #
         installPhase = ''
-          #
-          # <Example>
-          #
-          moduleDir="$out/module"
-          mkdir -p "$moduleDir"
-          cp IonUpdate.ps1 IonUpdate.psd1 IonUpdate.psm1 "$moduleDir/"
           mkdir -p "$out/bin"
-          cat > "$out/bin/ion-update" << EOF
-          #!/usr/bin/env bash
-          export PSModulePath="$moduleDir:\$PSModulePath"
-          ${lib.getExe pkgs.powershell} -NonInteractive -Command "$moduleDir/IonUpdate.ps1 \$@"
-          EOF
-          chmod +x "$out/bin/ion-update"
+          cp run.bash "$out/bin/qkqemu-run"
+          chmod +x "$out/bin/qkqemu-run"
         '';
       };
-      #
-      # <Just package>
-      nixosModules.package =
-        {
-          pkgs,
-          ...
-        }:
-        let
-          pkgsystem = pkgs.stdenv.hostPlatform.system;
-          mainpackage = self.packages.${pkgsystem}.default;
-        in
-        {
-          # config to be implemented via the `options`
-          config.environment.systemPackages = [
-            mainpackage
-          ];
-        };
       #
       # <PACKAGE + service via Options>
       nixosModules.default =
@@ -64,59 +37,144 @@
         let
           pkgsystem = pkgs.stdenv.hostPlatform.system;
           mainpackage = self.packages.${pkgsystem}.default;
-          <PACKAGE NAME>-nixops = config.services.<PACKAGE NAME>;
+          qkqemu-nixops = config.services.quick-qemu;
         in
+        with lib;
         {
+          #
+          #
           # Options for services overlay
-          options.services.<PACKAGE NAME> = with lib; {
-            enable = mkEnableOption "IonUpdate scheduled service";
-            example = mkOption {
-              type = types.str;
-              default = "<Option default>";
-              description = "<Option Description>";
+          options.services.quick-qemu = {
+            default = { };
+            enable = mkEnableOption "Quick QEMU VM/Systemd wrapper";
+            virtualmachines = mkOption {
+              default = { };
+              description = "List of VM, in submodule format. Name of submodule should relate to a definition in flake.nix";
+              type = types.attrsOf (
+                types.submodule (
+                  { name, ... }:
+                  {
+                    options = {
+                      #
+                      enable = mkEnableOption "This VM service.";
+                      diskPath = mkOption {
+                        type = types.str;
+                        default = name;
+                        description = "Absolute path to the target dir. User should have access to this dir.";
+                      };
+                      portForward = {
+                        vmPort = mkOption {
+                          type = types.str;
+                          default = "22";
+                          description = "Port from the VM";
+                        };
+                        hostPort = mkOption {
+                          type = types.str;
+                          default = "2222";
+                          description = "Port on the host";
+                        };
+                      };
+                      firewall = {
+                        allowedTCPPorts = mkOption {
+                          type = types.listOf types.int;
+                          default = [ ];
+                          description = "Ports that should be opened on the local firewall.";
+                        };
+                        allowedUDPPorts = mkOption {
+                          type = types.listOf types.int;
+                          default = [ ];
+                          description = "Ports that should be opened on the local firewall.";
+                        };
+                      };
+                    };
+                  }
+                )
+              );
             };
           };
           #
+          #
           # config to be implemented via the `options`
-          config = lib.mkIf <PACKAGE NAME>-nixops.enable {
+          config = lib.mkIf qkqemu-nixops.enable {
+            #
             # Imports package and runs the install steps
             environment.systemPackages = [
               mainpackage
+              pkgs.virt-manager
             ];
-            # rootless identity
+            #
+            # enables QEMU
+            virtualisation.libvirtd.enable = true;
+            # Enables nested virtualization
+            boot.extraModprobeConfig = ''
+              options kvm_intel nested=1
+            '';
+            #
+            # rootless identity that runs all the VMs
             users = {
-              groups.<PACKAGE NAME> = { };
-              users.<PACKAGE NAME> = {
+              groups.qkqemu = { };
+              users.qkqemu = {
                 enable = true;
-                group = "<PACKAGE NAME>";
+                group = "qkqemu";
                 isSystemUser = true;
+                createHome = true;
+                home = "/var/qkqemu";
+                extraGroups = [ "libvirtd" ];
               };
             };
-            # systemd service
-            systemd = {
-              services.<PACKAGE NAME> = {
-                description = "<PACKAGE NAME> service";
-                path = with pkgs; [
-                  powershell
-                ];
-                serviceConfig = with lib; {
-                  Type = "oneshot";
-                  User = "<PACKAGE NAME>";
-                  Group = "<PACKAGE NAME>";
-                  ExecStart = ''
-                    ${getExe mainpackage} <PACKAGE ARGS 4 Service>
-                  '';
-                };
-              };
-              timers.<PACKAGE NAME> = {
-                description = "<PACKAGE NAME> timer";
-                wantedBy = [ "timers.target" ];
-                timerConfig = {
-                  OnCalendar = <PACKAGE NAME>-nixops.interval;
-                  Persistent = true;
-                };
-              };
-            };
+            #
+            # Firewall rules per VM
+            networking = mkMerge (
+              mapAttrsToList (
+                name: conf:
+                mkIf (conf.enable) {
+                  firewall = conf.firewall;
+                }
+              ) qkqemu-nixops.virtualmachines
+            );
+            #
+            # Systemd Service for each VM
+            systemd = mkMerge (
+              mapAttrsToList (
+                name: conf:
+                mkIf (conf.enable) {
+                  services."qkqemu-vm-${name}" = {
+                    enable = conf.enable;
+                    description = "QEMU VM wrapper for VM [${name}] running under [${conf.user}]";
+                    after = [ "network.target" ];
+                    wantedBy = [ "multi-user.target" ];
+                    path = with pkgs; [
+                      qemu
+                      bash
+                      nixos-rebuild
+                      git
+                    ];
+                    # Set remote port mapping
+                    environment =
+                      let
+                        vport = conf.portForward.vmPort;
+                        hport = conf.portForward.hostPort;
+                      in
+                      {
+                        QEMU_NET_OPTS = "hostfwd=tcp::${hport}-:${vport}";
+                      };
+                    serviceConfig = {
+                      User = conf.user;
+                      Group = conf.group;
+                      # Set to disk path
+                      WorkingDirectory = conf.diskPath;
+                      # Start VM via qkqemu-run
+                      ExecStart = ''
+                        ${mainpackage} ${name}
+                      '';
+                      #
+                      Restart = "always";
+                      #
+                    };
+                  };
+                }
+              ) qkqemu-nixops.virtualmachines
+            );
           };
         };
     };
