@@ -138,7 +138,7 @@
               mapAttrsToList (
                 name: conf:
                 mkIf (conf.enable) {
-                  services."qkqemunix-vm-${name}" = {
+                  services."qkqemunix-${name}" = {
                     enable = conf.enable;
                     description = "QEMU VM wrapper for VM [${name}] running under [${conf.user}]";
                     after = [ "network.target" ];
@@ -159,8 +159,8 @@
                         QEMU_NET_OPTS = "hostfwd=tcp::${hport}-:${vport}";
                       };
                     serviceConfig = {
-                      User = conf.user;
-                      Group = conf.group;
+                      User = "qkqemunix";
+                      Group = "qkqemunix";
                       # Set to disk path
                       WorkingDirectory = conf.diskPath;
                       # Start VM via qkqemunix-run
