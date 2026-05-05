@@ -179,14 +179,12 @@
                       environment =
                         let
                           #conf.portForward.vmPort;
-                          NET_OPTS = mkMerge (
-                            mapAttrsToList (_: ports: 
+                          NET_OPTS = mapAttrsToList (_: ports:
                               "hostfwd=tcp::${toString ports.vm}-:${toString ports.host}"
-                            ) conf.portForwarding
-                          );
+                            ) conf.portForwarding;
                         in
                         {
-                          #QEMU_NET_OPTS = concatStringsSep "," NET_OPTS;
+                          QEMU_NET_OPTS = concatStringsSep "," NET_OPTS;
                         };
                       serviceConfig = {
                         User = "qkqemunix";
