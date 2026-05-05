@@ -44,7 +44,7 @@
           #
           #
           # Options for services overlay
-          options.services.quick-qemu = {
+          options.services.quick-qemu = with types; {
             default = { };
             enable = mkEnableOption "Quick QEMU VM/Systemd wrapper";
             rootConfigRepo = mkOption {
@@ -64,7 +64,7 @@
                       enable = mkEnableOption "This VM service.";
                       useRootConfigRepo = mkEnableOption "Use of the parent repo configured under 'services.quick-qemu'";
                       configRepo = mkOption {
-                        type = types.str;
+                        type = str;
                         default = name;
                         description = "url repository containing the nixosConfiguration for this VM.";
                       };
@@ -73,17 +73,25 @@
                         default = name;
                         description = "Absolute path to the target dir. 'qkqemunix' user should have access to this dir.";
                       };
-                      portForward = {
-                        vmPort = mkOption {
-                          type = types.str;
-                          default = "22";
-                          description = "Port from the VM";
-                        };
-                        hostPort = mkOption {
-                          type = types.str;
-                          default = "2222";
-                          description = "Port on the host";
-                        };
+                      portForwarding = mkOption {
+                        default = { };
+                        description = "Ports to forward from the VM to the host";
+                        type = types.listOf (
+                          types.submodule {
+                            options = {
+                              vmPort = mkOption {
+                                type = types.str;
+                                default = "22";
+                                description = "Port from the VM";
+                              };
+                              hostPort = mkOption {
+                                type = types.str;
+                                default = "2222";
+                                description = "Port on the host";
+                              };
+                            };
+                          }
+                        );
                       };
                       firewall = {
                         allowedTCPPorts = mkOption {
@@ -151,8 +159,7 @@
                 mkIf (conf.enable) {
                   services."qkqemunix-${name}" =
                     let
-                      configRepo =
-                        if (conf.useRootConfigRepo) then qkqemunix-nixops.rootConfigRepo else conf.configRepo;
+                      configRepo = if (conf.useRootConfigRepo) then qkqemunix-nixops.rootConfigRepo else conf.configRepo;
                     in
                     {
                       enable = conf.enable;
@@ -168,11 +175,13 @@
                       # Set remote port mapping
                       environment =
                         let
-                          vport = conf.portForward.vmPort;
-                          hport = conf.portForward.hostPort;
+                          #conf.portForward.vmPort;
+                          NET_OPTS = mkMerge (
+                            mapAttrsToList (ports: "hostfwd=tcp::${ports.hport}-:${ports.vport}") conf.portForwarding
+                          );
                         in
                         {
-                          QEMU_NET_OPTS = "hostfwd=tcp::${hport}-:${vport}";
+                          QEMU_NET_OPTS = concatStringsSep "," NET_OPTS;
                         };
                       serviceConfig = {
                         User = "qkqemunix";

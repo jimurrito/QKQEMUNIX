@@ -34,7 +34,7 @@ In your host's `flake.nix`, add this repo as an input and import the module:
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
-    qkqemunix.url = "github:youruser/qkqemunix"; # or your forgejo/local path
+    qkqemunix.url = "github:jimurrito/qkqemunix";
     qkqemunix.inputs.nixpkgs.follows = "nixpkgs";
   };
 
@@ -68,12 +68,12 @@ services.quick-qemu = {
       enable = true;
       diskPath = "/var/qkqemunix/my-vm"; # must be accessible by the qkqemunix user
       useRootConfigRepo = true;
-      portForward = {
-        vmPort  = "22";    # SSH port inside the VM
-        hostPort = "2222"; # Port exposed on the host
-      };
+      portForwarding = [
+        { vmPort = "22";  hostPort = "2222"; } # SSH
+        { vmPort = "80";  hostPort = "8080"; } # HTTP
+      ];
       firewall = {
-        allowedTCPPorts = [ 2222 ];
+        allowedTCPPorts = [ 2222 8080 ];
         allowedUDPPorts = [ ];
       };
     };
@@ -84,10 +84,9 @@ services.quick-qemu = {
       diskPath = "/var/qkqemunix/my-other-vm";
       useRootConfigRepo = false;
       configRepo = "git+https://your.forgejo.instance/youruser/other-nixos-config";
-      portForward = {
-        vmPort  = "22";
-        hostPort = "2223";
-      };
+      portForwarding = [
+        { vmPort = "22"; hostPort = "2223"; }
+      ];
       firewall.allowedTCPPorts = [ 2223 ];
     };
 
@@ -139,8 +138,9 @@ All options live under `services.quick-qemu`.
 | `virtualmachines.<name>.useRootConfigRepo` | bool | `false` | Use the top-level `rootConfigRepo` instead of a per-VM repo |
 | `virtualmachines.<name>.configRepo` | string | — | Per-VM flake URL (used when `useRootConfigRepo = false`) |
 | `virtualmachines.<name>.diskPath` | string | `<name>` | Absolute path to the VM's working directory |
-| `virtualmachines.<name>.portForward.vmPort` | string | `"22"` | Port inside the VM to forward |
-| `virtualmachines.<name>.portForward.hostPort` | string | `"2222"` | Port on the host to bind |
+| `virtualmachines.<name>.portForwarding` | list of `{ vmPort, hostPort }` | `[]` | Port forwards from VM to host |
+| `virtualmachines.<name>.portForwarding.[].vmPort` | string | `"22"` | Port inside the VM to forward |
+| `virtualmachines.<name>.portForwarding.[].hostPort` | string | `"2222"` | Port on the host to bind |
 | `virtualmachines.<name>.firewall.allowedTCPPorts` | list of int | `[]` | TCP ports to open on the host firewall |
 | `virtualmachines.<name>.firewall.allowedUDPPorts` | list of int | `[]` | UDP ports to open on the host firewall |
 
@@ -156,7 +156,7 @@ When `services.quick-qemu.enable = true`, the module will:
 - Create a dedicated `qkqemunix` system user and group (home at `/var/qkqemunix`)
 - For each enabled VM:
   - Create a systemd service `qkqemunix-<name>` that runs as the `qkqemunix` user
-  - Set `QEMU_NET_OPTS` for port forwarding
+  - Set `QEMU_NET_OPTS` with one `hostfwd` entry per item in `portForwarding`
   - Apply firewall rules from the VM's `firewall` block
   - Restart the service automatically on failure
 
