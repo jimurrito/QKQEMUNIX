@@ -82,13 +82,13 @@
                             {
                               options = {
                                 vm = mkOption {
-                                  type = types.str;
-                                  default = "22";
+                                  type = types.int;
+                                  default = 22;
                                   description = "Port from the VM";
                                 };
                                 host = mkOption {
-                                  type = types.str;
-                                  default = "2222";
+                                  type = types.int;
+                                  default = 2222;
                                   description = "Port on the host";
                                 };
                               };
@@ -180,7 +180,9 @@
                         let
                           #conf.portForward.vmPort;
                           NET_OPTS = mkMerge (
-                            mapAttrsToList (ports: "hostfwd=tcp::${ports.hport}-:${ports.vport}") conf.portForwarding
+                            mapAttrsToList (
+                              _: ports: "hostfwd=tcp::${toString ports.vm}-:${toString ports.host}"
+                            ) conf.portForwarding
                           );
                         in
                         {
