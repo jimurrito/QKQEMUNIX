@@ -180,9 +180,9 @@
                         let
                           #conf.portForward.vmPort;
                           NET_OPTS = mkMerge (
-                            mapAttrsToList (
-                              _: ports: "hostfwd=tcp::${toString ports.vm}-:${toString ports.host}"
-                            ) conf.portForwarding
+                            mapAttrsToList (_: ports: [
+                              "hostfwd=tcp::${toString ports.vm}-:${toString ports.host}"
+                            ]) conf.portForwarding
                           );
                         in
                         {
