@@ -179,9 +179,9 @@
                       environment =
                         let
                           #conf.portForward.vmPort;
-                          NET_OPTS = mapAttrsToList (_: ports:
-                              "hostfwd=tcp::${toString ports.vm}-:${toString ports.host}"
-                            ) conf.portForwarding;
+                          NET_OPTS = mapAttrsToList (
+                            _: ports: "hostfwd=tcp::${toString ports.host}-:${toString ports.vm}"
+                          ) conf.portForwarding;
                         in
                         {
                           QEMU_NET_OPTS = concatStringsSep "," NET_OPTS;
