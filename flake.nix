@@ -76,7 +76,7 @@
                       portForwarding = mkOption {
                         default = { };
                         description = "Ports to forward from the VM to the host";
-                        type = types.listOf (
+                        type = types.attrsOf (
                           types.submodule (
                             { ... }:
                             {
