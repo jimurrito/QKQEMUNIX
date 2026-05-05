@@ -77,20 +77,23 @@
                         default = { };
                         description = "Ports to forward from the VM to the host";
                         type = types.listOf (
-                          types.submodule {
-                            options = {
-                              vmPort = mkOption {
-                                type = types.str;
-                                default = "22";
-                                description = "Port from the VM";
+                          types.submodule (
+                            { ... }:
+                            {
+                              options = {
+                                vm = mkOption {
+                                  type = types.str;
+                                  default = "22";
+                                  description = "Port from the VM";
+                                };
+                                host = mkOption {
+                                  type = types.str;
+                                  default = "2222";
+                                  description = "Port on the host";
+                                };
                               };
-                              hostPort = mkOption {
-                                type = types.str;
-                                default = "2222";
-                                description = "Port on the host";
-                              };
-                            };
-                          }
+                            }
+                          )
                         );
                       };
                       firewall = {
@@ -200,6 +203,7 @@
                 }
               ) qkqemunix-nixops.virtualmachines
             );
+            #
           };
         };
     };
