@@ -5,28 +5,9 @@
   };
   #
   outputs =
-    { self, nixpkgs }:
-    let
-      system = "x86_64-linux";
-      pkgs = nixpkgs.legacyPackages.${system};
-      #lib = nixpkgs.lib;
-    in
+    { ... }:
     {
-      packages.${system}.default = pkgs.stdenv.mkDerivation {
-        pname = "qkqemunix-run";
-        meta.mainProgram = "qkqemunix-run";
-        version = "0.1.0";
-        src = ./.;
-        dontBuild = true;
-        #
-        installPhase = ''
-          mkdir -p "$out/bin"
-          mv run.bash "$out/bin/qkqemunix-run"
-          chmod +x "$out/bin/qkqemunix-run"
-        '';
-      };
       #
-      # <PACKAGE + service via Options>
       nixosModules.default =
         {
           config,
@@ -35,8 +16,6 @@
           ...
         }:
         let
-          pkgsystem = pkgs.stdenv.hostPlatform.system;
-          mainpackage = self.packages.${pkgsystem}.default;
           qkqemunix-nixops = config.services.quick-qemu;
         in
         with lib;
@@ -118,11 +97,10 @@
           #
           #
           # config to be implemented via the `options`
-          config = lib.mkIf qkqemunix-nixops.enable {
+          config = mkIf qkqemunix-nixops.enable {
             #
             # Imports package and runs the install steps
             environment.systemPackages = [
-              mainpackage
               pkgs.virt-manager
             ];
             #
@@ -164,6 +142,7 @@
                   services."qkqemunix-${name}" =
                     let
                       configRepo = if (conf.useRootConfigRepo) then qkqemunix-nixops.rootConfigRepo else conf.configRepo;
+                      bash = getExe pkgs.bash;
                     in
                     {
                       enable = conf.enable;
@@ -194,7 +173,7 @@
                         WorkingDirectory = conf.diskPath;
                         # Start VM via qkqemunix-run
                         ExecStart = ''
-                          ${getExe mainpackage} ${name} ${configRepo}
+                          ${bash} ${./run.bash} ${name} ${configRepo}
                         '';
                         #
                         Restart = "always";
