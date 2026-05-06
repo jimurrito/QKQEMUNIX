@@ -78,6 +78,18 @@ services.quick-qemu = {
       };
     };
 
+    # VM that runs its systemd service as root
+    my-root-vm = {
+      enable = true;
+      diskPath = "/var/qkqemunix/my-root-vm";
+      useRootConfigRepo = true;
+      runAsRoot = true;
+      portForwarding = [
+        { vmPort = "22"; hostPort = "2224"; }
+      ];
+      firewall.allowedTCPPorts = [ 2224 ];
+    };
+
     # VM with its own config repo
     my-other-vm = {
       enable = true;
@@ -136,6 +148,7 @@ All options live under `services.quick-qemu`.
 | `rootConfigRepo` | string | — | Shared flake URL used by VMs with `useRootConfigRepo = true` |
 | `virtualmachines.<name>.enable` | bool | `false` | Enable the systemd service for this VM |
 | `virtualmachines.<name>.useRootConfigRepo` | bool | `false` | Use the top-level `rootConfigRepo` instead of a per-VM repo |
+| `virtualmachines.<name>.runAsRoot` | bool | `false` | Run the VM's systemd service as `root` instead of the `qkqemunix` user |
 | `virtualmachines.<name>.configRepo` | string | — | Per-VM flake URL (used when `useRootConfigRepo = false`) |
 | `virtualmachines.<name>.diskPath` | string | `<name>` | Absolute path to the VM's working directory |
 | `virtualmachines.<name>.portForwarding` | list of `{ vmPort, hostPort }` | `[]` | Port forwards from VM to host |
@@ -155,7 +168,7 @@ When `services.quick-qemu.enable = true`, the module will:
 - Enable nested virtualization (`kvm_intel nested=1`)
 - Create a dedicated `qkqemunix` system user and group (home at `/var/qkqemunix`)
 - For each enabled VM:
-  - Create a systemd service `qkqemunix-<name>` that runs as the `qkqemunix` user
+  - Create a systemd service `qkqemunix-<name>` that runs as the `qkqemunix` user (or `root` if `runAsRoot = true`)
   - Set `QEMU_NET_OPTS` with one `hostfwd` entry per item in `portForwarding`
   - Apply firewall rules from the VM's `firewall` block
   - Restart the service automatically on failure

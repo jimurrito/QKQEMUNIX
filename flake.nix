@@ -63,6 +63,7 @@
                       #
                       enable = mkEnableOption "This VM service.";
                       useRootConfigRepo = mkEnableOption "Use of the parent repo configured under 'services.quick-qemu'";
+                      runAsRoot = mkEnableOption "Run the systemd service as root.";
                       configRepo = mkOption {
                         type = str;
                         default = name;
@@ -187,7 +188,7 @@
                           QEMU_NET_OPTS = concatStringsSep "," NET_OPTS;
                         };
                       serviceConfig = {
-                        User = "qkqemunix";
+                        User = if (conf.runAsRoot) then "root" else "qkqemunix";
                         Group = "qkqemunix";
                         # Set to disk path
                         WorkingDirectory = conf.diskPath;
