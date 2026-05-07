@@ -1,11 +1,17 @@
 {
   description = "Flake for streamlining the creation of QEMU VMs via nix build-vm and systemd";
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
+    test-vm.url = "github:jimurrito/nixos-test-vm";
   };
   #
   outputs =
-    { ... }:
+    {
+      self,
+      nixpkgs,
+      test-vm,
+      ...
+    }:
     {
       #
       nixosModules.default =
@@ -186,5 +192,47 @@
             #
           };
         };
+      #
+      #
+      #
+      #
+      # TestVM
+      nixosConfigurations =
+        let
+          testConfig =
+            { ... }:
+            {
+              services.quick-qemu = {
+                enable = true;
+                rootConfigRepo = "git+https://forgejo.immerhouse.com/jimurrito/nixos-config";
+                virtualmachines = {
+                  test-vm = {
+                    enable = true;
+                    useRootConfigRepo = true;
+                    diskPath = "/libvirt/test-vm";
+                    portForwarding.ssh = {
+                      vm = 22;
+                      host = 2022;
+                    };
+                    firewall.allowedTCPPorts = [ 2022 ];
+                  };
+                };
+              };
+            };
+        in
+        {
+          test-vm = nixpkgs.lib.nixosSystem {
+            system = "x86_64-linux";
+            modules = [
+              test-vm.baselineConfig
+              # test config
+              self.nixosModules.default
+              testConfig
+            ];
+          };
+        };
     };
+
+  #
+  #
 }

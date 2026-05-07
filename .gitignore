@@ -1,1 +1,3 @@
 quick-qemu/
+result/
+*.qcow2
