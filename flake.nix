@@ -204,17 +204,22 @@
             {
               services.quick-qemu = {
                 enable = true;
-                rootConfigRepo = "git+https://forgejo.immerhouse.com/jimurrito/nixos-config";
+                rootConfigRepo = "git+https://forgejo.immerhouse.com/jimurrito/podmanix";
                 virtualmachines = {
                   test-vm = {
                     enable = true;
                     useRootConfigRepo = true;
                     diskPath = "/libvirt/test-vm";
-                    portForwarding.ssh = {
-                      vm = 22;
-                      host = 2022;
+                    portForwarding = {
+                      ssh = {
+                        vm = 22;
+                        host = 2022;
+                      };
+                      nginx = {
+                        vm = 8080;
+                        host = 8080;
+                      };
                     };
-                    firewall.allowedTCPPorts = [ 2022 ];
                   };
                 };
               };
