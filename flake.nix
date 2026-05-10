@@ -77,6 +77,12 @@
                                   default = 2222;
                                   description = "Port on the host";
                                 };
+                                protocol = mkOption {
+                                  type = types.str;
+                                  default = "tcp";
+                                  description = "Enables the protcol to be used by the port forward.";
+                                };
+                                openOnHostFW = mkEnableOption "Opens host port on host's firewall.";
                               };
                             }
                           )
@@ -135,7 +141,19 @@
               mapAttrsToList (
                 name: conf:
                 mkIf (conf.enable) {
-                  firewall = conf.firewall;
+                  #  ran if VM is enabled
+                  firewall = mkMerge (
+                    mapAttrsToList (
+                      pname: pconf:
+                      mkIf (pconf.openOnHostFW) {
+                        #
+                        allowedTCPPorts = if (pconf.protocol == "tcp") then [ pconf.host ] else [ ];
+                        allowedUDPPorts = if (pconf.protocol == "udp") then [ pconf.host ] else [ ];
+                        #
+                      }
+                    ) conf.portForwarding
+                  );
+                  #
                 }
               ) qkqemunix-nixops.virtualmachines
             );
@@ -218,6 +236,7 @@
                       nginx = {
                         vm = 8080;
                         host = 8080;
+                        openOnHostFW = true;
                       };
                     };
                   };

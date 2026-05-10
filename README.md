@@ -59,7 +59,7 @@ services.quick-qemu = {
   enable = true;
 
   # Optional: set a shared config repo used by all VMs that opt in via useRootConfigRepo
-  rootConfigRepo = "git+https://your.forgejo.instance/youruser/nixos-config";
+  rootConfigRepo = "git+https://your.git.repo/youruser/repo";
 
   virtualmachines = {
 
@@ -68,13 +68,9 @@ services.quick-qemu = {
       enable = true;
       diskPath = "/var/qkqemunix/my-vm"; # must be accessible by the qkqemunix user
       useRootConfigRepo = true;
-      portForwarding = [
-        { vmPort = "22";  hostPort = "2222"; } # SSH
-        { vmPort = "80";  hostPort = "8080"; } # HTTP
-      ];
-      firewall = {
-        allowedTCPPorts = [ 2222 8080 ];
-        allowedUDPPorts = [ ];
+      portForwarding = {
+        ssh  = { vm = 22; host = 2222; openOnHostFW = true; };
+        http = { vm = 80; host = 8080; openOnHostFW = true; };
       };
     };
 
@@ -84,10 +80,9 @@ services.quick-qemu = {
       diskPath = "/var/qkqemunix/my-root-vm";
       useRootConfigRepo = true;
       runAsRoot = true;
-      portForwarding = [
-        { vmPort = "22"; hostPort = "2224"; }
-      ];
-      firewall.allowedTCPPorts = [ 2224 ];
+      portForwarding = {
+        ssh = { vm = 22; host = 2224; openOnHostFW = true; };
+      };
     };
 
     # VM with its own config repo
@@ -96,10 +91,9 @@ services.quick-qemu = {
       diskPath = "/var/qkqemunix/my-other-vm";
       useRootConfigRepo = false;
       configRepo = "git+https://your.forgejo.instance/youruser/other-nixos-config";
-      portForwarding = [
-        { vmPort = "22"; hostPort = "2223"; }
-      ];
-      firewall.allowedTCPPorts = [ 2223 ];
+      portForwarding = {
+        ssh = { vm = 22; host = 2223; openOnHostFW = true; };
+      };
     };
 
   };
@@ -151,11 +145,11 @@ All options live under `services.quick-qemu`.
 | `virtualmachines.<name>.runAsRoot` | bool | `false` | Run the VM's systemd service as `root` instead of the `qkqemunix` user |
 | `virtualmachines.<name>.configRepo` | string | — | Per-VM flake URL (used when `useRootConfigRepo = false`) |
 | `virtualmachines.<name>.diskPath` | string | `<name>` | Absolute path to the VM's working directory |
-| `virtualmachines.<name>.portForwarding` | list of `{ vmPort, hostPort }` | `[]` | Port forwards from VM to host |
-| `virtualmachines.<name>.portForwarding.[].vmPort` | string | `"22"` | Port inside the VM to forward |
-| `virtualmachines.<name>.portForwarding.[].hostPort` | string | `"2222"` | Port on the host to bind |
-| `virtualmachines.<name>.firewall.allowedTCPPorts` | list of int | `[]` | TCP ports to open on the host firewall |
-| `virtualmachines.<name>.firewall.allowedUDPPorts` | list of int | `[]` | UDP ports to open on the host firewall |
+| `virtualmachines.<name>.portForwarding` | attrs of submodules | `{}` | Named port forwards from VM to host |
+| `virtualmachines.<name>.portForwarding.<name>.vm` | int | `22` | Port inside the VM to forward |
+| `virtualmachines.<name>.portForwarding.<name>.host` | int | `2222` | Port on the host to bind |
+| `virtualmachines.<name>.portForwarding.<name>.protocol` | string | `"tcp"` | Protocol for the forward (`"tcp"` or `"udp"`) |
+| `virtualmachines.<name>.portForwarding.<name>.openOnHostFW` | bool | `false` | Automatically open `host` on the host firewall using the correct protocol |
 
 ---
 
@@ -169,8 +163,9 @@ When `services.quick-qemu.enable = true`, the module will:
 - Create a dedicated `qkqemunix` system user and group (home at `/var/qkqemunix`)
 - For each enabled VM:
   - Create a systemd service `qkqemunix-<name>` that runs as the `qkqemunix` user (or `root` if `runAsRoot = true`)
-  - Set `QEMU_NET_OPTS` with one `hostfwd` entry per item in `portForwarding`
-  - Apply firewall rules from the VM's `firewall` block
+  - Set `QEMU_NET_OPTS` with one `hostfwd` entry per item in `portForwarding`, using the configured `protocol`
+  - Automatically open host ports on the firewall for any `portForwarding` entry with `openOnHostFW = true`
+  - Apply any additional firewall rules from the VM's `firewall` block
   - Restart the service automatically on failure
 
 ---
