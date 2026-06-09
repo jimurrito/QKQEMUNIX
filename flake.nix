@@ -1,8 +1,11 @@
 {
   description = "Flake for streamlining the creation of QEMU VMs via nix build-vm and systemd";
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
-    test-vm.url = "github:jimurrito/nixos-test-vm";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
+    test-vm = {
+      url = "github:jimurrito/nixos-test-vm";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
   #
   outputs =
@@ -111,11 +114,6 @@
           # config to be implemented via the `options`
           config = mkIf qkqemunix-nixops.enable {
             #
-            # Imports package and runs the install steps
-            environment.systemPackages = [
-              pkgs.virt-manager
-            ];
-            #
             # enables QEMU
             virtualisation.libvirtd.enable = true;
             # Enables nested virtualization
@@ -193,15 +191,13 @@
                       serviceConfig = {
                         User = if (conf.runAsRoot) then "root" else "qkqemunix";
                         Group = "qkqemunix";
+                        Restart = "always";
                         # Set to disk path
                         WorkingDirectory = conf.diskPath;
                         # Start VM via qkqemunix-run
                         ExecStart = ''
                           ${bash} ${./run.bash} ${name} ${configRepo}
                         '';
-                        #
-                        Restart = "always";
-                        #
                       };
                     };
                 }
