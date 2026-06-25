@@ -18,4 +18,4 @@ nixos-rebuild build-vm  --refresh  --flake "${configRepo}#${vmName}" || exit 1
 
 echo "Starting QEMU VM [${vmName}]. Port forwarding set for [$QEMU_NET_OPTS]."
 
-QEMU_KERNEL_PARAMS=console=ttyS0 result/bin/run-${vmName}-vm 
+QEMU_KERNEL_PARAMS=console=ttyS0 QEMU_OPTS="-device virtio-balloon,free-page-reporting=on" result/bin/run-${vmName}-vm
