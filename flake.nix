@@ -218,7 +218,7 @@
             {
               services.quick-qemu = {
                 enable = true;
-                rootConfigRepo = "git+https://forgejo.immerhouse.com/jimurrito/podmanix";
+                rootConfigRepo = "git+https://github.com/jimurrito/podmanix";
                 virtualmachines = {
                   test-vm = {
                     enable = true;
@@ -244,7 +244,8 @@
           test-vm = nixpkgs.lib.nixosSystem {
             system = "x86_64-linux";
             modules = [
-              test-vm.baselineConfig
+              # 4gb of ram so it can handle the nested VM
+              (import test-vm.baselineConfig { memorySize = 4098; })
               # test config
               self.nixosModules.default
               testConfig
