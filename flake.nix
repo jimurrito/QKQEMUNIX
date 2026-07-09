@@ -27,17 +27,15 @@
       nixosConfigurations =
         let
           testConfig =
-            { pkgs, ... }:
+            { ... }:
             {
-              # 
+              #
               services.quick-qemu = {
                 enable = true;
-                rootConfigRepo = "git+https://github.com/jimurrito/nixos-test-vm";
+                configRepo = "git+https://github.com/jimurrito/nixos-test-vm";
                 virtualmachines = {
                   test-vm = {
                     enable = true;
-                    useRootConfigRepo = true;
-                    diskPath = "/libvirt/test-vm";
                     portForwarding = {
                       ssh = {
                         vm = 22;
@@ -60,8 +58,11 @@
             system = "x86_64-linux";
             modules = [
               # 4gb of ram so it can handle the nested VM
-              (import test-vm.baselineConfig { memorySize = 4098; })
-              {virtualisation.vmVariant.virtualisation.writableStoreUseTmpfs = false;}
+              (import test-vm.baselineConfig {
+                cores = 4;
+                memorySize = 4096;
+              })
+              { virtualisation.vmVariant.virtualisation.writableStoreUseTmpfs = false; }
               # test config
               self.nixosModules.default
               testConfig

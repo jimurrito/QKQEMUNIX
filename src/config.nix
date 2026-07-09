@@ -8,9 +8,11 @@ with lib;
 let
   #
   qkqemunix-nixops = config.services.quick-qemu;
+  vms = qkqemunix-nixops.virtualmachines;
   #
-  # vm mapper
-  #vmMapper = vmConfig: logic: (mapAttrsToList (vmName: vmConf: logic) vmConfig);
+  # vm object unwrapper
+  vmMapper =
+    logic: (mkMerge (mapAttrsToList (vmName: vmConf: (mkIf vmConf.enable (logic vmName vmConf))) vms));
   #
 in
 {
@@ -21,9 +23,11 @@ in
     # Enables nested virtualization
     boot.extraModprobeConfig = ''
       options kvm_intel nested=1
+      options kvm_amd nested=1
     '';
     #
     # rootless identity that runs all the VMs
+    # Created regardless of if any specific single VM uses it.
     users = {
       groups.qkqemunix = { };
       users.qkqemunix = {
@@ -31,190 +35,109 @@ in
         group = "qkqemunix";
         isSystemUser = true;
         createHome = true;
-        home = "/var/qkqemunix";
+        home = "/libvirt";
         extraGroups = [ "libvirtd" ];
       };
     };
     #
+    #
     # Firewall rules per VM
-    networking = mkMerge (
-      mapAttrsToList (
-        name: conf:
-        mkIf (conf.enable) {
-          #  ran if VM is enabled
-          firewall = mkMerge (
-            mapAttrsToList (
-              pname: pconf:
-              mkIf (pconf.openOnHostFW) {
-                #
-                allowedTCPPorts = if (pconf.protocol == "tcp") then [ pconf.host ] else [ ];
-                allowedUDPPorts = if (pconf.protocol == "udp") then [ pconf.host ] else [ ];
-                #
-              }
-            ) conf.portForwarding
-          );
-          #
-        }
-      ) qkqemunix-nixops.virtualmachines
+    networking = vmMapper (
+      _: vmConf: {
+        firewall = mkMerge (
+          mapAttrsToList (
+            _: portConf:
+            let
+              fwAllow = proto: (if (portConf.protocol == proto) then [ portConf.host ] else [ ]);
+            in
+            mkIf (portConf.openOnHostFW) {
+              allowedTCPPorts = fwAllow "tcp";
+              allowedUDPPorts = fwAllow "udp";
+            }
+          ) vmConf.portForwarding
+        );
+      }
     );
     #
+    #
     # Systemd Service for each VM
-    systemd = mkMerge (
-      mapAttrsToList (
-        name: conf:
-        mkIf (conf.enable) {
-          services."qkqemunix-${name}" =
-            let
-              configRepo = if (conf.useRootConfigRepo) then qkqemunix-nixops.rootConfigRepo else conf.configRepo;
-              bash = getExe pkgs.bash;
-            in
-            {
-              enable = conf.enable;
-              description = "QEMU VM wrapper for VM [${name}] running under [qkqemunix]";
+    systemd = vmMapper (
+      vmName: vmConf: {
+        services =
+          let
+            serviceUser = if (vmConf.runAsRoot) then "root" else "qkqemunix";
+            overrideDiskPath = (vmConf.overrides ? "diskPath");
+            diskPath =
+              if overrideDiskPath then
+                vmConf.overrides.diskPath
+              else
+                "${qkqemunix-nixops.diskPathRoot}/${vmName}";
+          in
+          {
+            #
+            #
+            # VM diskPath creator
+            "qkqemunix-dpc-${vmName}" = {
+              enable = vmConf.enable;
+              description = "DiskPath creator for qkqemunix VM [${vmName}]";
               after = [ "network.target" ];
               wantedBy = [ "multi-user.target" ];
-              path = with pkgs; [
-                qemu
-                bash
-                nixos-rebuild
-                git
-              ];
-              # Set remote port mapping
-              environment =
-                let
-                  #conf.portForward.vmPort;
-                  NET_OPTS = mapAttrsToList (
-                    _: ports: "hostfwd=tcp::${toString ports.host}-:${toString ports.vm}"
-                  ) conf.portForwarding;
-                in
-                {
-                  QEMU_NET_OPTS = concatStringsSep "," NET_OPTS;
-                };
+              path = with pkgs; [ coreutils ];
               serviceConfig = {
-                User = if (conf.runAsRoot) then "root" else "qkqemunix";
+                User = serviceUser;
                 Group = "qkqemunix";
-                Restart = "always";
-                # Set to disk path
-                WorkingDirectory = conf.diskPath;
-                # Start VM via qkqemunix-run
+                Type = "oneshot";
                 ExecStart = ''
-                  ${bash} ${./run.bash} ${name} ${configRepo}
+                  ${pkgs.coreutils}/bin/mkdir -p ${diskPath}
                 '';
               };
             };
-        }
-      ) qkqemunix-nixops.virtualmachines
+            #
+            #
+            # VM Service
+            "qkqemunix-${vmName}" =
+              let
+                overrideRepo = (vmConf.overrides ? "configRepo");
+                configRepo = if overrideRepo then vmConf.configRepo else qkqemunix-nixops.configRepo;
+                #
+                qemuNetOptions = mapAttrsToList (
+                  _: fwds: "hostfwd=${fwds.protocol}::${toString fwds.host}-:${toString fwds.vm}"
+                ) vmConf.portForwarding;
+                # makes script an executable
+                runScript = pkgs.runCommand vmName { } ''
+                  cp ${./run.bash} $out
+                  chmod 0555 $out
+                '';
+                #
+              in
+              {
+                enable = vmConf.enable;
+                description = "QEMU VM wrapper for VM [${vmName}] running under [qkqemunix]";
+                after = [ "qkqemunix-dpc-${vmName}.service" ];
+                wantedBy = [ "multi-user.target" ];
+                path = with pkgs; [
+                  qemu
+                  bash
+                  nixos-rebuild
+                  git
+                ];
+                environment = {
+                  # Set remote port mapping
+                  QEMU_NET_OPTS = concatStringsSep "," qemuNetOptions;
+                };
+                serviceConfig = {
+                  User = serviceUser;
+                  Group = "qkqemunix";
+                  Restart = "always";
+                  WorkingDirectory = diskPath;
+                  ExecStart = ''
+                    ${runScript} ${vmName} ${configRepo}
+                  '';
+                };
+              };
+          };
+      }
     );
     #
   };
 }
-
-#
-#
-#
-#
-#
-/*
-        #
-        # Firewall rules per VM
-        networking = mkMerge (
-          mapAttrsToList (
-            name: conf:
-            mkIf (vmConf.enable) {
-              #  ran if VM is enabled
-              firewall = mkMerge (
-                mapAttrsToList (
-                  pname: pconf:
-                  mkIf (pvmConf.openOnHostFW) {
-                    #
-                    allowedTCPPorts = if (pvmConf.protocol == "tcp") then [ pvmConf.host ] else [ ];
-                    allowedUDPPorts = if (pvmConf.protocol == "udp") then [ pvmConf.host ] else [ ];
-                    #
-                  }
-                ) vmConf.portForwarding
-              );
-              #
-            }
-          ) qkqemunix-nixops.virtualmachines
-        );
-        #
-        # Systemd Service for each VM
-        systemd = mkMerge (
-          mapAttrsToList (
-            name: conf:
-            mkIf (vmConf.enable) {
-              services = {
-                # File system creator
-                "qkqemunix-diskpath-creator" = {
-                  enable = vmConf.enable;
-                  description = "Ensures file disk paths exist for qkqemunix VMs";
-                  after = [ "network.target" ];
-                  wantedBy = [ "multi-user.target" ];
-                  path = with pkgs; [ coreutils ];
-                  serviceConfig =
-                    let
-                      mkDir = "${pkgs.coreutils}/bin/mkdir";
-                    in
-                    {
-                      User = if (vmConf.runAsRoot) then "root" else "qkqemunix";
-                      Group = "qkqemunix";
-                      Restart = "always";
-                      # Set to disk path
-                      WorkingDirectory = "/libvirt";
-                      # Start VM via qkqemunix-run
-                      ExecStart = ''
-                        ${mkDir} -p ...
-                      '';
-                    };
-                };
-                #
-                #
-                #  VM service(s)
-                "qkqemunix-${name}" =
-                  let
-                    configRepo = if (vmConf.useRootConfigRepo) then qkqemunix-nixops.rootConfigRepo else vmConf.configRepo;
-                    bash = getExe pkgs.bash;
-                  in
-                  {
-                    enable = vmConf.enable;
-                    description = "QEMU VM wrapper for VM [${name}] running under [qkqemunix]";
-                    after = [ "qkqemunix-diskpath-creator.target" ];
-                    wantedBy = [ "multi-user.target" ];
-                    path = with pkgs; [
-                      qemu
-                      bash
-                      nixos-rebuild
-                      git
-                    ];
-                    # Set remote port mapping
-                    environment =
-                      let
-                        #vmConf.portForward.vmPort;
-                        NET_OPTS = mapAttrsToList (
-                          _: ports: "hostfwd=tcp::${toString ports.host}-:${toString ports.vm}"
-                        ) vmConf.portForwarding;
-                      in
-                      {
-                        QEMU_NET_OPTS = concatStringsSep "," NET_OPTS;
-                      };
-                    serviceConfig = {
-                      User = if (vmConf.runAsRoot) then "root" else "qkqemunix";
-                      Group = "qkqemunix";
-                      Restart = "always";
-                      # Set to disk path
-                      WorkingDirectory = vmConf.diskPath;
-                      # Start VM via qkqemunix-run
-                      ExecStart = ''
-                        ${bash} ${./run.bash} ${name} ${configRepo}
-                      '';
-                    };
-                  };
-              };
-            }
-          ) qkqemunix-nixops.virtualmachines
-        );
-        #
-      }
-    );
-  });
-*/

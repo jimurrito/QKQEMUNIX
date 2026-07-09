@@ -45,7 +45,7 @@ In your host's `flake.nix`, add this repo as an input and import the NixOS modul
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
     qkqemunix = {
-      url = "github:<owner>/qkqemunix";
+      url = "github:jimurrito/qkqemunix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
@@ -70,27 +70,31 @@ In your host's `configuration.nix`:
 services.quick-qemu = {
   enable = true;
 
-  # Optional: shared config repo used by VMs with useRootConfigRepo = true
-  rootConfigRepo = "git+https://<your-git-host>/<user>/<repo>";
+  # Shared config repo used by all VMs (can be overridden per VM)
+  configRepo = "git+https://<your-git-host>/<user>/<repo>";
+
+  # Root directory under which each VM's working directory is created.
+  # Each VM gets: <diskPathRoot>/<vm-name>  (default: /libvirt)
+  diskPathRoot = "/libvirt";
 
   virtualmachines = {
 
-    # VM using the shared root config repo
+    # VM using all defaults (inherits configRepo and diskPathRoot)
     <vm-name> = {
       enable = true;
-      diskPath = "/var/qkqemunix/<vm-name>";
-      useRootConfigRepo = true;
       portForwarding = {
         ssh  = { vm = 22; host = 2222; openOnHostFW = true; };
         http = { vm = 80; host = 8080; openOnHostFW = true; };
       };
     };
 
-    # VM with its own config repo
+    # VM with per-VM overrides
     <other-vm-name> = {
       enable = true;
-      diskPath = "/var/qkqemunix/<other-vm-name>";
-      configRepo = "git+https://<your-git-host>/<user>/<other-repo>";
+      overrides = {
+        configRepo = "git+https://<your-git-host>/<user>/<other-repo>";
+        diskPath   = "/data/vms/<other-vm-name>";
+      };
       portForwarding = {
         ssh = { vm = 22; host = 2223; openOnHostFW = true; };
       };
@@ -130,19 +134,17 @@ virtualisation.vmVariant = {
 
 ## Real Example
 
-A host running two VMs — one using a shared config repo, one with its own:
+A host running two VMs — one using the shared config repo, one with its own:
 
 ```nix
 services.quick-qemu = {
   enable = true;
-  rootConfigRepo = "git+https://forgejo.example.com/jimurrito/nixos-configs";
+  configRepo = "git+https://forgejo.example.com/jimurrito/nixos-configs";
 
   virtualmachines = {
 
     my-vm = {
       enable = true;
-      diskPath = "/var/qkqemunix/my-vm";
-      useRootConfigRepo = true;
       portForwarding = {
         ssh  = { vm = 22; host = 2222; openOnHostFW = true; };
         http = { vm = 80; host = 8080; openOnHostFW = true; };
@@ -151,8 +153,6 @@ services.quick-qemu = {
 
     my-root-vm = {
       enable = true;
-      diskPath = "/var/qkqemunix/my-root-vm";
-      useRootConfigRepo = true;
       runAsRoot = true;
       portForwarding = {
         ssh = { vm = 22; host = 2224; openOnHostFW = true; };
@@ -161,8 +161,9 @@ services.quick-qemu = {
 
     my-other-vm = {
       enable = true;
-      diskPath = "/var/qkqemunix/my-other-vm";
-      configRepo = "git+https://forgejo.example.com/jimurrito/other-nixos-config";
+      overrides = {
+        configRepo = "git+https://forgejo.example.com/jimurrito/other-nixos-config";
+      };
       portForwarding = {
         ssh = { vm = 22; host = 2223; openOnHostFW = true; };
       };
@@ -205,20 +206,20 @@ To consume the module in your flake:
 
 All options live under `services.quick-qemu`.
 
-| Option                                                      | Type                | Default  | Description                                                            |
-| ----------------------------------------------------------- | ------------------- | -------- | ---------------------------------------------------------------------- |
-| `enable`                                                    | bool                | `false`  | Enable the qkqemunix module                                            |
-| `rootConfigRepo`                                            | string              | —        | Shared flake URL used by VMs with `useRootConfigRepo = true`           |
-| `virtualmachines.<name>.enable`                             | bool                | `false`  | Enable the systemd service for this VM                                 |
-| `virtualmachines.<name>.useRootConfigRepo`                  | bool                | `false`  | Use the top-level `rootConfigRepo` instead of a per-VM repo            |
-| `virtualmachines.<name>.runAsRoot`                          | bool                | `false`  | Run the VM's systemd service as `root` instead of the `qkqemunix` user |
-| `virtualmachines.<name>.configRepo`                         | string              | —        | Per-VM flake URL (used when `useRootConfigRepo = false`)               |
-| `virtualmachines.<name>.diskPath`                           | string              | `<name>` | Absolute path to the VM's working directory                            |
-| `virtualmachines.<name>.portForwarding`                     | attrs of submodules | `{}`     | Named port forwards from VM to host                                    |
-| `virtualmachines.<name>.portForwarding.<name>.vm`           | int                 | `22`     | Port inside the VM to forward                                          |
-| `virtualmachines.<name>.portForwarding.<name>.host`         | int                 | `2222`   | Port on the host to bind                                               |
-| `virtualmachines.<name>.portForwarding.<name>.protocol`     | string              | `"tcp"`  | Protocol for the forward (`"tcp"` or `"udp"`)                          |
-| `virtualmachines.<name>.portForwarding.<name>.openOnHostFW` | bool                | `false`  | Automatically open `host` port on the host firewall                    |
+| Option                                                      | Type                | Default     | Description                                                             |
+| ----------------------------------------------------------- | ------------------- | ----------- | ----------------------------------------------------------------------- |
+| `enable`                                                    | bool                | `false`     | Enable the qkqemunix module                                             |
+| `configRepo`                                                | string              | —           | Flake URL to the repo containing each VM's `nixosConfiguration`         |
+| `diskPathRoot`                                              | string              | `"/libvirt"`| Root directory under which each VM's working directory is created       |
+| `virtualmachines.<name>.enable`                             | bool                | `false`     | Enable the systemd service for this VM                                  |
+| `virtualmachines.<name>.runAsRoot`                          | bool                | `false`     | Run the VM's systemd service as `root` instead of the `qkqemunix` user  |
+| `virtualmachines.<name>.overrides.<key>.configRepo`         | string              | `""`        | Override the shared `configRepo` for this VM                            |
+| `virtualmachines.<name>.overrides.<key>.diskPath`           | string              | `""`        | Override the computed disk path (`diskPathRoot/<name>`) for this VM     |
+| `virtualmachines.<name>.portForwarding`                     | attrs of submodules | `{}`        | Named port forwards from VM to host                                     |
+| `virtualmachines.<name>.portForwarding.<name>.vm`           | int                 | `22`        | Port inside the VM to forward                                           |
+| `virtualmachines.<name>.portForwarding.<name>.host`         | int                 | `2222`      | Port on the host to bind                                                |
+| `virtualmachines.<name>.portForwarding.<name>.protocol`     | string              | `"tcp"`     | Protocol for the forward (`"tcp"` or `"udp"`)                           |
+| `virtualmachines.<name>.portForwarding.<name>.openOnHostFW` | bool                | `false`     | Automatically open `host` port on the host firewall                     |
 
 ---
 
@@ -228,9 +229,10 @@ When `services.quick-qemu.enable = true`, the module will:
 
 - Enable `virtualisation.libvirtd`
 - Enable nested virtualization (`kvm_intel nested=1`)
-- Create a dedicated `qkqemunix` system user and group (home at `/var/qkqemunix`)
+- Create a dedicated `qkqemunix` system user and group (home at `/libvirt`)
 - For each enabled VM:
-  - Create a systemd service `qkqemunix-<name>` running as `qkqemunix` (or `root` if `runAsRoot = true`)
+  - Create a oneshot service `qkqemunix-dpc-<name>` that ensures the VM's working directory exists
+  - Create a systemd service `qkqemunix-<name>` (starts after the dpc service) running as `qkqemunix` (or `root` if `runAsRoot = true`)
   - Set `QEMU_NET_OPTS` with one `hostfwd` entry per item in `portForwarding`
   - Open host ports on the firewall for any `portForwarding` entry with `openOnHostFW = true`
   - Restart the service automatically on failure
@@ -253,8 +255,8 @@ Adjust the port to match the `host` value you configured for the VM's SSH forwar
 
 - The config repo URL must be accessible from the host at runtime — `qkqemunix-run` fetches it fresh on every start via `nixos-rebuild build-vm --refresh`.
 - `graphics = false` is recommended for server VMs — console output is routed through `ttyS0` and captured by systemd, accessible via `journalctl -u qkqemunix-<name>`.
-- The `diskPath` directory must be writable by the `qkqemunix` user before the service starts.
-- Always use an absolute path for `diskPath` (e.g. `/var/qkqemunix/my-vm`) to avoid ambiguity about where the working directory resolves at runtime.
+- VM working directories are created automatically by `qkqemunix-dpc-<name>` before the VM starts. The `qkqemunix` user (or `root` if `runAsRoot = true`) must have write access to `diskPathRoot`.
+- Always use an absolute path for any `overrides.diskPath` value.
 
 ---
 
