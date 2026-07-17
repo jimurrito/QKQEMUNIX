@@ -82,6 +82,8 @@ services.quick-qemu = {
     # VM using all defaults (inherits configRepo and diskPathRoot)
     <vm-name> = {
       enable = true;
+      # Optional: set a unique subnet to avoid conflicts between VMs (default: 10.0.2.0/24)
+      subnet = "10.0.3.0/24";
       portForwarding = {
         ssh  = { vm = 22; host = 2222; openOnHostFW = true; };
         http = { vm = 80; host = 8080; openOnHostFW = true; };
@@ -161,6 +163,7 @@ services.quick-qemu = {
 
     my-other-vm = {
       enable = true;
+      subnet = "10.0.3.0/24";
       overrides = {
         configRepo = "git+https://forgejo.example.com/jimurrito/other-nixos-config";
       };
@@ -215,6 +218,7 @@ All options live under `services.quick-qemu`.
 | `virtualmachines.<name>.runAsRoot`                          | bool                | `false`     | Run the VM's systemd service as `root` instead of the `qkqemunix` user  |
 | `virtualmachines.<name>.overrides.<key>.configRepo`         | string              | `""`        | Override the shared `configRepo` for this VM                            |
 | `virtualmachines.<name>.overrides.<key>.diskPath`           | string              | `""`        | Override the computed disk path (`diskPathRoot/<name>`) for this VM     |
+| `virtualmachines.<name>.subnet`                             | string              | `"10.0.2.0/24"` | QEMU network subnet for this VM; set per-VM to avoid IP conflicts   |
 | `virtualmachines.<name>.portForwarding`                     | attrs of submodules | `{}`        | Named port forwards from VM to host                                     |
 | `virtualmachines.<name>.portForwarding.<name>.vm`           | int                 | `22`        | Port inside the VM to forward                                           |
 | `virtualmachines.<name>.portForwarding.<name>.host`         | int                 | `2222`      | Port on the host to bind                                                |
@@ -233,7 +237,7 @@ When `services.quick-qemu.enable = true`, the module will:
 - For each enabled VM:
   - Create a oneshot service `qkqemunix-dpc-<name>` that ensures the VM's working directory exists
   - Create a systemd service `qkqemunix-<name>` (starts after the dpc service) running as `qkqemunix` (or `root` if `runAsRoot = true`)
-  - Set `QEMU_NET_OPTS` with one `hostfwd` entry per item in `portForwarding`
+  - Set `QEMU_NET_OPTS` with one `hostfwd` entry per item in `portForwarding`, plus the VM's `subnet` as the QEMU network range
   - Open host ports on the firewall for any `portForwarding` entry with `openOnHostFW = true`
   - Restart the service automatically on failure
 
