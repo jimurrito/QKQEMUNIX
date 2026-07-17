@@ -14,8 +14,11 @@ if [[ -z "$configRepo" ]]; then
     echo "[ERROR] VM Hostname was not defined. EX: bash run.bash <hostname>  <config repo>"
 fi
 
-nixos-rebuild build-vm  --refresh  --flake "${configRepo}#${vmName}" || exit 1
+nixos-rebuild build-vm --refresh --flake "${configRepo}#${vmName}" || exit 1
 
-echo "Starting QEMU VM [${vmName}]. Port forwarding set for [$QEMU_NET_OPTS]."
+echo "Starting QEMU VM:  [${vmName}]"
+echo "Kernel Params:     [${QEMU_KERNEL_PARAMS}]"
+echo "QEMU Options:      [${QEMU_OPTS}]"
+echo "Network Options:   [${QEMU_NET_OPTS}]"
 
-QEMU_KERNEL_PARAMS=console=ttyS0 QEMU_OPTS="-device virtio-balloon,free-page-reporting=on" result/bin/run-${vmName}-vm
+result/bin/run-${vmName}-vm

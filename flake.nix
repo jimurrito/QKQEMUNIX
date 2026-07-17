@@ -24,51 +24,79 @@
       #
       #
       # TestVM
-      nixosConfigurations =
-        let
-          testConfig =
-            { ... }:
-            {
-              #
-              services.quick-qemu = {
-                enable = true;
-                configRepo = "git+https://github.com/jimurrito/nixos-test-vm";
-                virtualmachines = {
-                  test-vm = {
-                    enable = true;
-                    portForwarding = {
-                      ssh = {
-                        vm = 22;
-                        host = 2022;
-                      };
-                      nginx = {
-                        vm = 80;
-                        host = 8080;
-                        openOnHostFW = true;
+      nixosConfigurations = {
+        # Input test-vm
+        test-vm = nixpkgs.lib.nixosSystem {
+          system = "x86_64-linux";
+          modules = [
+            # 4gb of ram so it can handle the nested VM
+            (import test-vm.baselineConfig {
+              cores = 4;
+              memorySize = 4096;
+            })
+            { virtualisation.vmVariant.virtualisation.writableStoreUseTmpfs = false; }
+            self.nixosModules.default
+            # test config
+            (
+              { ... }:
+              {
+                services.quick-qemu = {
+                  enable = true;
+                  # use the localsource for the VM repo
+                  configRepo = ./.;
+                  virtualmachines = {
+                    nested-vm = {
+                      enable = true;
+                      portForwarding = {
+                        ssh = {
+                          vm = 22;
+                          host = 2022;
+                        };
+                        nginx = {
+                          vm = 80;
+                          host = 8080;
+                        };
                       };
                     };
                   };
                 };
-              };
-            };
-        in
-        {
-          # Input test-vm
-          test-vm = nixpkgs.lib.nixosSystem {
-            system = "x86_64-linux";
-            modules = [
-              # 4gb of ram so it can handle the nested VM
-              (import test-vm.baselineConfig {
-                cores = 4;
-                memorySize = 4096;
-              })
-              { virtualisation.vmVariant.virtualisation.writableStoreUseTmpfs = false; }
-              # test config
-              self.nixosModules.default
-              testConfig
-            ];
-          };
+              }
+            )
+          ];
         };
+        #
+        # Nested VM
+        nested-vm = nixpkgs.lib.nixosSystem {
+          system = "x86_64-linux";
+          modules = [
+            # 4gb of ram so it can handle the nested VM
+            (import test-vm.baselineConfig { })
+            ({ lib, ... }: {
+              networking.hostName = lib.mkOverride 0 "nested-vm";
+              users.users.user.password = "test";
+              services.openssh = {
+                enable = true;
+                settings.PasswordAuthentication = true;
+              };
+              networking.firewall.allowedTCPPorts = [
+                22
+                80
+              ];
+              services.nginx = {
+                enable = true;
+                virtualHosts."_" = {
+                  forceSSL = false;
+                  enableACME = false;
+                  locations."/".extraConfig = ''
+                    return 200 "Nginx is running successfully!";
+                    add_header Content-Type text/plain;
+                  '';
+                };
+              };
+            })
+          ];
+        };
+      };
     };
 
   #

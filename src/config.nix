@@ -66,7 +66,7 @@ in
         services =
           let
             serviceUser = if (vmConf.runAsRoot) then "root" else "qkqemunix";
-            overrideDiskPath = (vmConf.overrides ? "diskPath");
+            overrideDiskPath = (vmConf.overrides.diskPath != "");
             diskPath =
               if overrideDiskPath then
                 vmConf.overrides.diskPath
@@ -97,12 +97,14 @@ in
             # VM Service
             "qkqemunix-${vmName}" =
               let
-                overrideRepo = (vmConf.overrides ? "configRepo");
-                configRepo = if overrideRepo then vmConf.configRepo else qkqemunix-nixops.configRepo;
-                #
-                qemuNetOptions = mapAttrsToList (
+                overrideRepo = vmConf.overrides.configRepo != "";
+                configRepo = if overrideRepo then vmConf.overrides.configRepo else qkqemunix-nixops.configRepo;
+                # portforwarding firewall config
+                qemuNetFWOptions = mapAttrsToList (
                   _: fwds: "hostfwd=${fwds.protocol}::${toString fwds.host}-:${toString fwds.vm}"
                 ) vmConf.portForwarding;
+                # merge FW config with network subnet config
+                qemuNetOptions = qemuNetFWOptions ++ [ "net=${vmConf.subnet}" ];
                 # makes script an executable
                 runScript = pkgs.runCommand vmName { } ''
                   cp ${./run.bash} $out
@@ -122,8 +124,9 @@ in
                   git
                 ];
                 environment = {
-                  # Set remote port mapping
                   QEMU_NET_OPTS = concatStringsSep "," qemuNetOptions;
+                  QEMU_KERNEL_PARAMS = "console=ttyS0";
+                  QEMU_OPTS = "-device virtio-balloon,free-page-reporting=on";
                 };
                 serviceConfig = {
                   User = serviceUser;

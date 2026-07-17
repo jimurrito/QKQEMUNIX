@@ -29,11 +29,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1782351250,
-        "narHash": "sha256-JxRHkUuZgJTWNgG9jdmiL2uQDW4aAx8rF4d+5pCERAw=",
+        "lastModified": 1783544217,
+        "narHash": "sha256-W0JTMf4HpaKiWdQgVCbKGeT+CLC+BWHB+hlU9vjJDvQ=",
         "owner": "jimurrito",
         "repo": "nixos-test-vm",
-        "rev": "b609a5ab4e853000f0f9014df3b00cd9e3a0bf9e",
+        "rev": "a2e71cffdb474cc4f3942f0c365212ddd387401a",
         "type": "github"
       },
       "original": {
